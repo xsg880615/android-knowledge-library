@@ -1,0 +1,271 @@
+Android7.0多窗口
+在讲解多窗口的时候先附上在模拟器打开自由状态模式方便查看演示效果：
+(1)运行adb remount
+(2)运行adb shell
+(3)chmod 777 system
+(4)运行cd /system/etc/permissions
+(5)运行sed -e "s/live_mallpaper/freeform_window_management/" android.software.live_wallpaper.xml >freeform.xml
+1、应用支持多窗口的功能
+[java] view plain copy
+
+ 
+<!--  
+    resizeableActivity="false" 设置为false表明该Activity不支持分屏操作，当用户尝试分屏操作时则以全屏进行显示  
+    supportsPictureInPicture="true" Activity是否支持画中画的显示，如果resizeableActivity为false则忽略这项  
+-->  
+<activity  
+    android:name=".config.ConfigMultiActivity01"  
+    android:resizeableActivity="false"  
+    android:supportsPictureInPicture="true"  
+    android:taskAffinity="" />  
+
+
+2、布局属性
+在Android N 中activity标签下支持layout标签用来设置在自由状态模式下Activity的宽高和位置。
+
+[java] view plain copy
+
+ 
+<activity  
+    android:name=".config.ConfigMultiActivity02"  
+    android:taskAffinity="">  
+  
+    <!--  
+        defaultHeight:自由形状模式下默认高度  
+        defaultWidth:自由形状模式下默认宽度  
+        gravity:Activity启动时初始位置  
+        minHeight:自由形状模式和分屏模式下最小高度  
+        minWidth:自由形状模式和分屏模式下最小宽度  
+    -->  
+    <layout  
+        android:defaultHeight="200dp"  
+        android:defaultWidth="350dp"  
+        android:gravity="top|left"  
+        android:minHeight="150dp"  
+        android:minWidth="300dp" />  
+</activity>  
+
+
+3、在多窗口启动新的Activity
+在Android7.0提供了在多窗口启动Activity用来共享屏幕，只需要在启动的Intent加上FLAG_ACTIVITY_LAUNCH_ADJACENT即可。
+
+[java] view plain copy
+
+ 
+Intent intent = new Intent(this, ConfigMultiActivity04.class);  
+//系统会尝试在临近Activity附近启动，这样两个Activity将共享屏幕，系统不一定能实现这个操作，  
+//但如果可以系统则将这两个Activity处于相邻的位置  
+intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);  
+startActivity(intent);  
+
+
+可以看到当移动的时候会有一个背景，这个背景也是自己来定义的。
+
+[java] view plain copy
+
+ 
+<!--  
+    在分屏模式下，放大尺寸运行时将会使用下面的颜色进行填充，  
+    windowBackground或windowBackgroundFallback,经过测试发现只有windowBackground起作用  
+-->  
+<item name="android:windowBackground">@color/colorAccent</item>  
+<item name="android:windowBackgroundFallback">@color/colorAccent</item>  
+如果处于自由状态模式下，则启动新的Activity可通过 ActivityOptions.setLaunchBounds()来指定新Activity的尺寸和位置，如果不处于多窗口模式下则无效 
+
+[java] view plain copy
+
+ 
+/* 
+    如果设备处于自由形状模式，则在启动新 Activity 时，用户可通过调用 ActivityOptions.setLaunchBounds() 
+    指定新 Activity 的尺寸和屏幕位置。 如果设备不处于多窗口模式，则该方法无效。 
+ */  
+Rect bound = new Rect(330, 130, 400, 400);  
+ActivityOptions options = ActivityOptions.makeBasic();  
+options.setLaunchBounds(bound);  
+startActivity(intent, options.toBundle());  
+
+
+4、多窗口变更通知与查询
+
+[java] view plain copy
+
+ 
+    /* 
+        Activity.isInMultiWindowMode() 
+        调用该方法以确认 Activity 是否处于多窗口模式。 
+        Activity.isInPictureInPictureMode() 
+        调用该方法以确认 Activity 是否处于画中画模式。 
+     */  
+}  
+@Override  
+public void onMultiWindowModeChanged(boolean isInMultiWindowMode) {  
+    super.onMultiWindowModeChanged(isInMultiWindowMode);  
+    /** 
+     * Activity进入或退出模式时，系统调用此方法，进入是isInMultiWindowMode为true 
+     */  
+    if(isInMultiWindowMode) {  
+        Toast.makeText(this, "enter the MultWindow", Toast.LENGTH_SHORT).show();  
+    }else {  
+        Toast.makeText(this, "exit the MultWindow", Toast.LENGTH_SHORT).show();  
+    }  
+}  
+@Override  
+public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode) {  
+    super.onPictureInPictureModeChanged(isInPictureInPictureMode);  
+    /** 
+     * Activity进入画中画或退出画中画的时候调用,进入isInPictureInPictureMode为true 
+     */  
+    if(isInPictureInPictureMode) {  
+        Toast.makeText(this, "enter the pictureInPicture", Toast.LENGTH_SHORT).show();  
+    }else {  
+        Toast.makeText(this, "exit the pictureInPicture", Toast.LENGTH_SHORT).show();  
+    }  
+}  
+
+
+5、多窗口的拖放功能
+在Android N中用户可以在Activity共享屏幕的同时之间拖放数据。
+
+[java] view plain copy
+
+ 
+iv.setOnLongClickListener(new View.OnLongClickListener() {  
+            @Override  
+            public boolean onLongClick(View v) {  
+                ClipData.Item item = new ClipData.Item(v.getTag().toString());  
+                //创建一个新的clipData使用tag作为label，这个MIME设置文本，  
+                // 它将创建一个新的ClipDescription对象包含这个ClipData  
+                ClipData dragData = ClipData.newPlainText(IMAGEVIEW_TAG, "这是DragActivity01的数据");  
+                // 初始化拖拽阴影  
+                View.DragShadowBuilder myShadow = new MyDragShadowBuilder(iv);  
+                // 开始进行拖拽  
+                v.startDragAndDrop(dragData,  // 将要拖拽的数据  
+                        myShadow,  // ShadowBuilder  
+                        null,      // 不需要本地数据  
+                        View.DRAG_FLAG_GLOBAL          // 没有则设置为0，如果是跨Activity进行拖放则使用View.DRAG_FLAG_GLOBAL  
+                        //如果需要对Activity拖放授予URI权限则使用DRAG_FLAG_GLOBAL_URI_READ和DRAG_FLAG_GLOBAL_URI_WRITE  
+                );  
+                return false;  
+            }  
+        });  
+接下来你只需要在Activity02中为控件设置拖放监听即可 
+
+[java] view plain copy
+
+ 
+   myDragEventListener mDragListen = new myDragEventListener();  
+    drag02_iv.setOnDragListener(mDragListen);  
+}  
+  
+protected class myDragEventListener implements View.OnDragListener {  
+    public boolean onDrag(View v, DragEvent event) {  
+        final int action = event.getAction();  
+        DragActivity02.this.requestDragAndDropPermissions(event);//请求DragEvent 中包含的 ClipData传递URI的权限。  
+        switch (action) {  
+            case DragEvent.ACTION_DRAG_STARTED:  
+                //判断这个View是否可以接受拖拽的数据  
+                if (event.getClipDescription().hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN)) {  
+                    v.setBackgroundColor(Color.BLUE);//被接收的View设置蓝色  
+                    v.invalidate();  
+                    return true;//返回true表明这个View可以接受这个拖拽的数据  
+                }  
+                return false;//返回false说明在当前拖拽的操作，这个View不会再次接收这事件直到ACTION_DRAG_ENDED被调用  
+            case DragEvent.ACTION_DRAG_ENTERED:  
+                v.setBackgroundColor(Color.GREEN);  
+                v.invalidate();  
+                return true;  
+            case DragEvent.ACTION_DRAG_LOCATION:  
+                return true;  
+            case DragEvent.ACTION_DRAG_EXITED:  
+                v.setBackgroundColor(Color.BLUE);  
+                v.invalidate();  
+                return true;  
+            case DragEvent.ACTION_DROP:  
+                //从DragEvent中得到拖拽的Item  
+                ClipData.Item item = event.getClipData().getItemAt(0);  
+                //从这个Item中得到文本数据  
+                String dragData = (String) item.getText();  
+                Toast.makeText(DragActivity02.this, "Dragged data is " + dragData, Toast.LENGTH_LONG).show();  
+                v.invalidate();  
+                return true;  
+  
+            case DragEvent.ACTION_DRAG_ENDED:  
+                v.setBackgroundColor(Color.parseColor("#888888"));  
+                v.invalidate();  
+                if (event.getResult()) {  
+                    Toast.makeText(DragActivity02.this, "The drop was handled.", Toast.LENGTH_LONG).show();  
+  
+                } else {  
+                    Toast.makeText(DragActivity02.this, "The drop didn't work.", Toast.LENGTH_LONG).show();  
+  
+                }  
+                return true;  
+            default:  
+                break;  
+        }  
+  
+        return false;  
+    }  
+
+##Android7.0新增Notification GroupSummary
+/**
+ * 在AndroidN  增加了通知组和通知组摘要的功能
+ * AndroidM中  有了查询当前应用活跃的Notification的功能
+ */
+1、查询当前应用活跃的Notification的数量
+
+[java] view plain copy
+
+ 
+private int getActiveNotifications() {  
+    StatusBarNotification[] statusbar = nm.getActiveNotifications();  
+    int number = statusbar.length;//这个大小包括GroupSummary  
+  
+    for (StatusBarNotification notification : statusbar) {  
+        if (notification.getId() == NOTIFICATION_GROUP_SUMMARY_ID) {  
+            number--;  
+        }  
+    }  
+    return number;  
+}  
+2、增加通知组和通知摘要 
+
+
+[java] view plain copy
+
+ 
+.setGroup(NOTIFICATION_GROUP);//将Notification添加到组中  
+[java] view plain copy
+
+ 
+.setGroupSummary(true);//标志这个Notification为一个摘要  
+注意的是为摘要添加ContentText要使用 
+
+
+[java] view plain copy
+
+ 
+.setStyle(new NotificationCompat.BigTextStyle().setSummaryText(  
+                            getString(R.string.summary_text, getActiveNotifications())))  
+当然如果你想监听用户清除通知动作可以加上 
+
+[java] view plain copy
+
+ 
+deleteBroadcastReceiver = new DeleteBroadcastReceiver();  
+        registerReceiver(deleteBroadcastReceiver, new IntentFilter(deleteAction));  
+
+[java] view plain copy
+
+ 
+.setDeleteIntent(deletePendingIntent) // 当用户清除掉Notification的时候执行这个意图也就是发送一个广播  
+[java] view plain copy
+
+ 
+class DeleteBroadcastReceiver extends BroadcastReceiver {  
+    @Override  
+    public void onReceive(Context context, Intent intent) {  
+        updateTextView();  
+    }  
+}  
+这样你每次清除通知就能在这个广播接收到了，good。
